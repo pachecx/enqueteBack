@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PollType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  DATE_SELECTION
+}
+
+enum PollStatus {
+  OPEN
+  CLOSED
+}
+
+enum DateSelectionMode {
+  ONE_DAY
+  MULTIPLE_DAYS
+}
+
+model Poll {
+  id             String       @id @default(cuid())
+  slug           String       @unique
+  question       String
+  type           PollType
+  month          Int?
+  year           Int?
+  dateMode       DateSelectionMode?
+  status         PollStatus   @default(OPEN)
+  adminTokenHash String       @unique
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  options        PollOption[]
+  votes          Vote[]
+}
+
+model PollOption {
+  id        String       @id @default(cuid())
+  pollId    String
+  text      String
+  createdAt DateTime     @default(now())
+  poll      Poll         @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes     VoteOption[]
+  @@index([pollId])
+}
+
+model Vote {
+  id             String       @id @default(cuid())
+  pollId         String
+  voterTokenHash String
+  createdAt      DateTime     @default(now())
+  poll           Poll         @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  options        VoteOption[]
+  days           VoteDay[]
+  @@index([pollId])
+}
+
+model VoteOption {
+  id       String     @id @default(cuid())
+  voteId   String
+  optionId String
+  vote     Vote       @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  @@unique([voteId, optionId])
+}
+
+model VoteDay {
+  id     String   @id @default(cuid())
+  voteId String
+  date   DateTime @db.Date
+  vote   Vote     @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  @@unique([voteId, date])
+  @@index([date])
+}
