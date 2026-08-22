@@ -1,28 +1,17 @@
-import { PollType, Prisma } from "@prisma/client";
-import { prisma } from "../prisma.js";
+import { randomUUID } from "node:crypto";
+import { pool, transaction } from "../database.js";
 import { createToken, hashToken } from "../utils/tokens.js";
 import { daysInMonth } from "../utils/dates.js";
 import type { CreatePollInput } from "../types/poll.js";
-
-const publicPoll = {
-  id: true,
-  slug: true,
-  question: true,
-  type: true,
-  month: true,
-  year: true,
-  dateMode: true,
-  status: true,
-  expiresAt: true,
-  createdAt: true,
-  options: { select: { id: true, text: true } },
-} satisfies Prisma.PollSelect;
+import { AppError } from "../utils/errors.js";
 
 function validatePoll(input: CreatePollInput): void {
   if (!input.question?.trim() || input.question.trim().length > 500)
-    throw new Error("A pergunta deve ter entre 1 e 500 caracteres.");
-  if (!Object.values(PollType).includes(input.type as PollType))
-    throw new Error("Tipo de enquete inválido.");
+    throw new AppError("A pergunta deve ter entre 1 e 500 caracteres.", 400);
+  if (
+    !["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DATE_SELECTION"].includes(input.type)
+  )
+    throw new AppError("Tipo de enquete inválido.", 400);
   if (input.type !== "DATE_SELECTION") {
     const options =
       input.options?.map((option) => option.trim()).filter(Boolean) ?? [];
@@ -32,12 +21,17 @@ function validatePoll(input: CreatePollInput): void {
       new Set(options.map((option) => option.toLowerCase())).size !==
         options.length
     )
-      throw new Error("Informe de 2 a 30 opções únicas.");
+      throw new AppError("Informe de 2 a 30 opções únicas.", 400);
   } else {
-    if (!input.month || !input.year) throw new Error("Informe mês e ano.");
+    if (!input.month || !input.year)
+      throw new AppError("Informe mês e ano.", 400);
     if (!input.dateMode)
-      throw new Error("Informe se a enquete aceita um ou vários dias.");
-    daysInMonth(input.month, input.year);
+      throw new AppError("Informe se a enquete aceita um ou vários dias.", 400);
+    try {
+      daysInMonth(input.month, input.year);
+    } catch {
+      throw new AppError("Mês ou ano inválido.", 400);
+    }
   }
 }
 
@@ -45,33 +39,66 @@ export async function createPoll(input: CreatePollInput) {
   validatePoll(input);
   const slug = createToken(8);
   const adminToken = createToken(32);
-  const poll = await prisma.poll.create({
-    data: {
-      slug,
-      question: input.question.trim(),
-      type: input.type,
-      month: input.type === "DATE_SELECTION" ? input.month : null,
-      year: input.type === "DATE_SELECTION" ? input.year : null,
-      dateMode: input.type === "DATE_SELECTION" ? input.dateMode : null,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-      adminTokenHash: hashToken(adminToken),
-      options:
-        input.type === "DATE_SELECTION"
-          ? undefined
-          : { create: input.options!.map((text) => ({ text: text.trim() })) },
-    },
-    select: publicPoll,
+  const poll = await transaction(async (client) => {
+    const id = randomUUID();
+    const result = await client.query(
+      `insert into polls (id, slug, question, type, month, year, date_mode, expires_at, admin_token_hash)
+       values ($1, $2, $3, $4::poll_type, $5, $6, $7::date_selection_mode, $8, $9)
+       returning id, slug, question, type, month, year, date_mode as "dateMode", status,
+                 expires_at as "expiresAt", created_at as "createdAt"`,
+      [
+        id,
+        slug,
+        input.question.trim(),
+        input.type,
+        input.type === "DATE_SELECTION" ? input.month : null,
+        input.type === "DATE_SELECTION" ? input.year : null,
+        input.type === "DATE_SELECTION" ? input.dateMode : null,
+        input.expiresAt ? new Date(input.expiresAt) : null,
+        hashToken(adminToken),
+      ],
+    );
+    const options: { id: string; text: string }[] = [];
+    for (const text of input.type === "DATE_SELECTION" ? [] : input.options!) {
+      const option = { id: randomUUID(), text: text.trim() };
+      await client.query(
+        "insert into poll_options (id, poll_id, text) values ($1, $2, $3)",
+        [option.id, id, option.text],
+      );
+      options.push(option);
+    }
+    return { ...result.rows[0], options };
   });
   return { poll, adminToken };
 }
 
 export async function getPoll(slug: string) {
-  return prisma.poll.findUnique({ where: { slug }, select: publicPoll });
+  return findPoll("p.slug = $1", [slug]);
 }
 
 export async function getPollByAdminToken(token: string) {
-  return prisma.poll.findUnique({
-    where: { adminTokenHash: hashToken(token) },
-    select: publicPoll,
-  });
+  return findPoll("p.admin_token_hash = $1", [hashToken(token)]);
+}
+
+async function findPoll(where: string, values: unknown[]) {
+  const result = await pool.query(
+    `select p.id, p.slug, p.question, p.type, p.month, p.year,
+    p.date_mode as "dateMode", p.status, p.expires_at as "expiresAt", p.created_at as "createdAt",
+    coalesce(json_agg(json_build_object('id', o.id, 'text', o.text) order by o.created_at)
+      filter (where o.id is not null), '[]') as options
+    from polls p left join poll_options o on o.poll_id = p.id where ${where} group by p.id`,
+    values,
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function closePoll(id: string) {
+  await pool.query(
+    "update polls set status = 'CLOSED', updated_at = now() where id = $1",
+    [id],
+  );
+}
+
+export async function deletePoll(id: string) {
+  await pool.query("delete from polls where id = $1", [id]);
 }

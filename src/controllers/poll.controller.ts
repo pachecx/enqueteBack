@@ -2,12 +2,14 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import {
   createPoll,
+  closePoll as closePollService,
+  deletePoll as deletePollService,
   getPoll,
   getPollByAdminToken,
 } from "../services/poll.service.js";
 import { createVote, getResults } from "../services/vote.service.js";
 import { createToken, hashToken } from "../utils/tokens.js";
-import { prisma } from "../prisma.js";
+import { statusCodeFor } from "../utils/errors.js";
 
 const createSchema = z.object({
   question: z.string(),
@@ -28,15 +30,22 @@ export async function postPoll(req: Request, res: Response) {
     const result = await createPoll(createSchema.parse(req.body));
     res.status(201).json(result);
   } catch (error) {
-    res.status(400).json({
+    res.status(statusCodeFor(error)).json({
       error: error instanceof Error ? error.message : "Dados inválidos.",
     });
   }
 }
 export async function showPoll(req: Request, res: Response) {
-  const poll = await getPoll(String(req.params.slug));
-  if (!poll) return res.status(404).json({ error: "Enquete não encontrada." });
-  return res.json(poll);
+  try {
+    const poll = await getPoll(String(req.params.slug));
+    if (!poll)
+      return res.status(404).json({ error: "Enquete não encontrada." });
+    return res.json(poll);
+  } catch (error) {
+    return res
+      .status(statusCodeFor(error))
+      .json({ error: "Erro interno do servidor." });
+  }
 }
 export async function postVote(req: Request, res: Response) {
   try {
@@ -56,7 +65,7 @@ export async function postVote(req: Request, res: Response) {
     });
     return res.status(201).json(result);
   } catch (error) {
-    return res.status(400).json({
+    return res.status(statusCodeFor(error)).json({
       error:
         error instanceof Error
           ? error.message
@@ -65,32 +74,35 @@ export async function postVote(req: Request, res: Response) {
   }
 }
 export async function showResults(req: Request, res: Response) {
-  const results = await getResults(String(req.params.slug));
-  if (!results)
-    return res.status(404).json({ error: "Enquete não encontrada." });
-  return res.json(results);
+  try {
+    const results = await getResults(String(req.params.slug));
+    if (!results)
+      return res.status(404).json({ error: "Enquete não encontrada." });
+    return res.json(results);
+  } catch (error) {
+    return res
+      .status(statusCodeFor(error))
+      .json({ error: "Erro interno do servidor." });
+  }
 }
 export async function showAdmin(req: Request, res: Response) {
   const poll = await getPollByAdminToken(String(req.params.token));
   if (!poll)
-    return res.status(404).json({ error: "Link administrativo inválido." });
+    return res.status(401).json({ error: "Link administrativo inválido." });
   const results = await getResults(poll.slug);
   return res.json({ poll, results });
 }
 export async function closePoll(req: Request, res: Response) {
   const poll = await getPollByAdminToken(String(req.params.token));
   if (!poll)
-    return res.status(404).json({ error: "Link administrativo inválido." });
-  await prisma.poll.update({
-    where: { id: poll.id },
-    data: { status: "CLOSED" },
-  });
+    return res.status(401).json({ error: "Link administrativo inválido." });
+  await closePollService(poll.id);
   return res.json({ message: "Enquete encerrada." });
 }
 export async function deletePoll(req: Request, res: Response) {
   const poll = await getPollByAdminToken(String(req.params.token));
   if (!poll)
-    return res.status(404).json({ error: "Link administrativo inválido." });
-  await prisma.poll.delete({ where: { id: poll.id } });
+    return res.status(401).json({ error: "Link administrativo inválido." });
+  await deletePollService(poll.id);
   return res.status(204).send();
 }

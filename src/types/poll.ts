@@ -10,3 +10,17 @@ export interface CreatePollInput {
   dateMode?: DateSelectionMode;
   expiresAt?: string;
 }
+
+export interface PollRecord {
+  id: string;
+  slug: string;
+  question: string;
+  type: PollType;
+  month: number | null;
+  year: number | null;
+  dateMode: DateSelectionMode | null;
+  status: "OPEN" | "CLOSED";
+  expiresAt: Date | null;
+  createdAt: Date;
+  options: { id: string; text: string }[];
+}
