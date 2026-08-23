@@ -4,6 +4,7 @@ import { createToken, hashToken } from "../utils/tokens.js";
 import { daysInMonth } from "../utils/dates.js";
 import type { CreatePollInput } from "../types/poll.js";
 import { AppError } from "../utils/errors.js";
+import { getResults } from "./vote.service.js";
 
 function validatePoll(input: CreatePollInput): void {
   if (!input.question?.trim() || input.question.trim().length > 500)
@@ -35,15 +36,15 @@ function validatePoll(input: CreatePollInput): void {
   }
 }
 
-export async function createPoll(input: CreatePollInput) {
+export async function createPoll(input: CreatePollInput, ownerId?: string) {
   validatePoll(input);
   const slug = createToken(8);
   const adminToken = createToken(32);
   const poll = await transaction(async (client) => {
     const id = randomUUID();
     const result = await client.query(
-      `insert into polls (id, slug, question, type, month, year, date_mode, expires_at, admin_token_hash)
-       values ($1, $2, $3, $4::poll_type, $5, $6, $7::date_selection_mode, $8, $9)
+      `insert into polls (id, slug, question, type, month, year, date_mode, expires_at, admin_token_hash, owner_id)
+       values ($1, $2, $3, $4::poll_type, $5, $6, $7::date_selection_mode, $8, $9, $10)
        returning id, slug, question, type, month, year, date_mode as "dateMode", status,
                  expires_at as "expiresAt", created_at as "createdAt"`,
       [
@@ -56,6 +57,7 @@ export async function createPoll(input: CreatePollInput) {
         input.type === "DATE_SELECTION" ? input.dateMode : null,
         input.expiresAt ? new Date(input.expiresAt) : null,
         hashToken(adminToken),
+        ownerId ?? null,
       ],
     );
     const options: { id: string; text: string }[] = [];
@@ -80,6 +82,19 @@ export async function getPollByAdminToken(token: string) {
   return findPoll("p.admin_token_hash = $1", [hashToken(token)]);
 }
 
+export async function getPollsByOwner(ownerId: string) {
+  const result = await pool.query<{ slug: string }>(
+    "select slug from polls where owner_id = $1 order by created_at desc",
+    [ownerId],
+  );
+  return Promise.all(
+    result.rows.map(async ({ slug }) => ({
+      poll: await getPoll(slug),
+      results: await getResults(slug),
+    })),
+  );
+}
+
 async function findPoll(where: string, values: unknown[]) {
   const result = await pool.query(
     `select p.id, p.slug, p.question, p.type, p.month, p.year,
@@ -101,4 +116,13 @@ export async function closePoll(id: string) {
 
 export async function deletePoll(id: string) {
   await pool.query("delete from polls where id = $1", [id]);
+}
+
+export async function claimPoll(adminToken: string, ownerId: string) {
+  const result = await pool.query(
+    "update polls set owner_id = $1, updated_at = now() where admin_token_hash = $2 returning slug",
+    [ownerId, hashToken(adminToken)],
+  );
+  if (!result.rows[0]) throw new AppError("Link administrativo inválido.", 401);
+  return result.rows[0];
 }

@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { pollRoutes } from "./routes/poll.routes.js";
+import { authRoutes } from "./routes/auth.routes.js";
 
 export const app = express();
 app.use(helmet());
@@ -26,6 +27,7 @@ app.use(
 );
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", pollRoutes);
+app.use("/api", authRoutes);
 app.use(
   (
     error: unknown,
