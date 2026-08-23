@@ -27,7 +27,7 @@ const voteSchema = z.object({
 
 export async function postPoll(req: Request, res: Response) {
   try {
-    const result = await createPoll(createSchema.parse(req.body));
+    const result = await createPoll(createSchema.parse(req.body), req.user?.id);
     res.status(201).json(result);
   } catch (error) {
     res.status(statusCodeFor(error)).json({
@@ -92,6 +92,7 @@ export async function showAdmin(req: Request, res: Response) {
   const results = await getResults(poll.slug);
   return res.json({ poll, results });
 }
+
 export async function closePoll(req: Request, res: Response) {
   const poll = await getPollByAdminToken(String(req.params.token));
   if (!poll)
@@ -99,6 +100,7 @@ export async function closePoll(req: Request, res: Response) {
   await closePollService(poll.id);
   return res.json({ message: "Enquete encerrada." });
 }
+
 export async function deletePoll(req: Request, res: Response) {
   const poll = await getPollByAdminToken(String(req.params.token));
   if (!poll)

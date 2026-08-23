@@ -18,7 +18,7 @@ const voteSchema = z.object({
 });
 export async function postPoll(req, res) {
     try {
-        const result = await createPoll(createSchema.parse(req.body));
+        const result = await createPoll(createSchema.parse(req.body), req.user?.id);
         res.status(201).json(result);
     }
     catch (error) {
