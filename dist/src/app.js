@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { pollRoutes } from "./routes/poll.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 export const app = express();
+app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({
     origin: process.env.FRONTEND_URL ?? "http://localhost:5173",
@@ -20,7 +21,11 @@ app.use(rateLimit({
     standardHeaders: "draft-7",
     legacyHeaders: false,
 }));
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => {
+    res.status(200).json({
+        status: "ok",
+    });
+});
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", pollRoutes);
 app.use("/api", authRoutes);
