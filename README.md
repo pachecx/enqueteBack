@@ -15,8 +15,18 @@ API de enquetes em Node.js, Express, TypeScript e PostgreSQL do Supabase. A regr
 ```bash
 npm run dev
 npm run build
+npm start
 npm test
 ```
+
+Na Vercel, use `backend` como diretório raiz do projeto. A função HTTP é
+exportada por `api/index.ts`; cadastre `DATABASE_URL` e `FRONTEND_URL` nas
+variáveis de ambiente do projeto. A migration do banco deve ser executada uma
+vez, manualmente, com `npm run db:migrate`, e não durante a inicialização da
+função.
+
+O health check está disponível em `GET /health` (e o endpoint legado
+`GET /api/health` continua disponível).
 
 ## Endpoints
 

@@ -25,6 +25,7 @@ app.use(
     legacyHeaders: false,
   }),
 );
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", pollRoutes);
 app.use("/api", authRoutes);
