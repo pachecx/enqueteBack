@@ -6,6 +6,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { pollRoutes } from "./routes/poll.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
+import { statusCodeFor } from "./utils/errors.js";
 export const app = express();
 app.set("trust proxy", 1);
 app.use(helmet());
@@ -29,4 +30,6 @@ app.get("/health", (_req, res) => {
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", pollRoutes);
 app.use("/api", authRoutes);
-app.use((error, _req, res, _next) => res.status(500).json({ error: "Erro interno do servidor." }));
+app.use((error, _req, res, _next) => res.status(statusCodeFor(error)).json({
+    error: error instanceof Error ? error.message : "Erro interno do servidor.",
+}));
