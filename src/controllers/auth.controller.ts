@@ -43,12 +43,27 @@ export async function postLogin(req: Request, res: Response) {
   try {
     const { identifier, password } = credentialsSchema.parse(req.body);
     return respondWithSession(res, await login(identifier, password));
-  } catch (error) {
-    return res.status(statusCodeFor(error)).json({
-      error:
-        error instanceof Error ? error.message : "Não foi possível entrar.",
+  }catch (error) {
+  console.error("ERRO NO LOGIN:", error);
+
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({
+      error: error.message,
     });
   }
+
+  if (error instanceof ZodError) {
+    return res.status(400).json({
+      error: "Dados inválidos.",
+    });
+  }
+
+  return res.status(500).json({
+    error: error instanceof Error
+      ? error.message
+      : "Erro interno do servidor.",
+  });
+}
 }
 
 export async function postLogout(req: Request, res: Response) {
