@@ -5,7 +5,7 @@ API de enquetes em Node.js, Express, TypeScript e PostgreSQL do Supabase. A regr
 ## Configuração
 
 1. Crie um projeto no Supabase.
-2. No `.env`, defina `DATABASE_URL` com a URI PostgreSQL do Supabase e `FRONTEND_URL` com a origem permitida. `SUPABASE_SERVICE_ROLE_KEY` é opcional para esta implementação SQL e, quando usada por outras integrações backend, nunca deve ser exposta.
+2. No `.env`, defina `ENQUETE_DATABASE_URL` com a URI PostgreSQL do Supabase e `FRONTEND_URL` com a origem permitida. `SUPABASE_SERVICE_ROLE_KEY` é opcional para esta implementação SQL e, quando usada por outras integrações backend, nunca deve ser exposta.
 3. Execute `npm install` e `npm run db:migrate` uma vez no banco.
 
 `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são documentadas no `.env.example` para integrações privadas futuras. A API usa conexão PostgreSQL direta/pooler, o que permite transações reais.
@@ -20,7 +20,7 @@ npm test
 ```
 
 Na Vercel, use `backend` como diretório raiz do projeto. A função HTTP é
-exportada por `api/index.ts`; cadastre `DATABASE_URL` e `FRONTEND_URL` nas
+exportada por `api/index.ts`; cadastre `ENQUETE_DATABASE_URL` e `FRONTEND_URL` nas
 variáveis de ambiente do projeto. A migration do banco deve ser executada uma
 vez, manualmente, com `npm run db:migrate`, e não durante a inicialização da
 função.

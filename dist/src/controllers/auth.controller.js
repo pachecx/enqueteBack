@@ -1,16 +1,16 @@
-import { z } from "zod";
 import { login, logout, register } from "../services/auth.service.js";
 import { claimPoll as claimPollService } from "../services/poll.service.js";
 import { getPollsByOwner } from "../services/poll.service.js";
-import { statusCodeFor } from "../utils/errors.js";
+import { z, ZodError } from "zod";
+import { AppError, statusCodeFor } from "../utils/errors.js";
 const credentialsSchema = z.object({
     identifier: z.string(),
     password: z.string(),
 });
 const cookieOptions = {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "none",
+    secure: true,
     maxAge: 1000 * 60 * 60 * 24 * 30,
 };
 function respondWithSession(res, session) {
@@ -36,8 +36,19 @@ export async function postLogin(req, res) {
         return respondWithSession(res, await login(identifier, password));
     }
     catch (error) {
-        return res.status(statusCodeFor(error)).json({
-            error: error instanceof Error ? error.message : "Não foi possível entrar.",
+        console.error("ERRO NO LOGIN:", error);
+        if (error instanceof AppError) {
+            return res.status(error.statusCode).json({
+                error: error.message,
+            });
+        }
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                error: "Dados inválidos.",
+            });
+        }
+        return res.status(500).json({
+            error: error instanceof Error ? error.message : "Erro interno do servidor.",
         });
     }
 }
